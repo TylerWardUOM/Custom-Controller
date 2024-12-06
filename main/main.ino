@@ -8,12 +8,15 @@ const uint8_t hidReportDescriptor[] = {
   0x05, 0x01,               // Usage Page (Generic Desktop Ctrls)
   0x09, 0x05,               // Usage (Game Pad)
   0xA1, 0x01,               // Collection (Application)
-  0x85, 0x01,
+  0x85, 0x01,               // Report ID (1)
 
+  // Joystick and button collection
+  0xA1, 0x00,               // Collection (Physical)
+  
   // Joystick X and Y axes
   0x05, 0x01,               // Usage Page (Generic Desktop Ctrls)
-  0x09, 0x30,               // Usage (X)
-  0x09, 0x31,               // Usage (Y)
+  0x09, 0x30,               // Usage (X) - Joystick X
+  0x09, 0x31,               // Usage (Y) - Joystick Y
   0x15, 0x81,               // Logical Minimum (-127)
   0x25, 0x7F,               // Logical Maximum (127)
   0x75, 0x08,               // Report Size (8 bits per axis)
@@ -30,12 +33,32 @@ const uint8_t hidReportDescriptor[] = {
   0x95, 0x08,               // Report Count (8 buttons)
   0x81, 0x02,               // Input (Data, Variable, Absolute)
 
-  0xC0                      // End Collection
+  0xC0,                     // End Collection (Physical)
+
+  // Second Joystick collection for Rx and Ry
+  0xA1, 0x00,               // Collection (Physical)
+  0x85, 0x02,               // Report ID (2)
+
+  // Joystick Rx and Ry axes
+  0x05, 0x01,               // Usage Page (Generic Desktop Ctrls)
+  0x09, 0x32,               // Usage (Z) - Joystick Rotation X
+  0x09, 0x33,               // Usage (Rx) - Joystick Rotation Y
+  0x15, 0x81,               // Logical Minimum (-127)
+  0x25, 0x7F,               // Logical Maximum (127)
+  0x75, 0x08,               // Report Size (8 bits per axis)
+  0x95, 0x02,               // Report Count (2 axes)
+  0x81, 0x02,               // Input (Data, Variable, Absolute)
+
+  0xC0,                     // End Collection (Physical)
+  0xC0                      // End Collection (Application)
 };
+
 
 BLEHIDDevice* hidDevice;
 BLEServer* server;
 BLECharacteristic* inputCharacteristic;
+BLECharacteristic* inputCharacteristic2;
+
 
 const int buttonA = 0;
 const int buttonB = 2;
@@ -71,10 +94,11 @@ void setup() {
   hidDevice = new BLEHIDDevice(server);
 
   hidDevice->manufacturer()->setValue("ESP32 Manufacturer");
-  hidDevice->pnp(0x02, 0x059E, 0x2018, 0x0100);
+  hidDevice->pnp(0x02, 0x092E, 0x2052, 0x0100);
   hidDevice->hidInfo(0x00, 0x01);
 
   inputCharacteristic = hidDevice->inputReport(0x01);
+  inputCharacteristic2 = hidDevice->inputReport(0x02);
   hidDevice->reportMap((uint8_t*)hidReportDescriptor, sizeof(hidReportDescriptor));
   hidDevice->startServices();
 
@@ -117,13 +141,19 @@ void loop() {
     yAxis = 0;
   }
 
+  int RxAxis = 0;
+  int RyAxis = 0;
+
+
+
+
   Serial.print("Normalized X-axis value (with deadzone): ");
   Serial.println(xAxis);
   Serial.print("Normalized Y-axis value (with deadzone): ");
   Serial.println(yAxis);
 
   // Create a combined report buffer
-  uint8_t combined_report[3] = {
+  uint8_t report1[3] = {
     (uint8_t)(xAxis & 0xFF), // X-axis value
     (uint8_t)(yAxis & 0xFF), // Y-axis value
     (uint8_t)(
@@ -134,16 +164,17 @@ void loop() {
     ),
   };
 
+  // Create a combined report buffer
+  uint8_t report2[2] = {
+    (uint8_t)(RxAxis & 0xFF), // X-axis value
+    (uint8_t)(RyAxis & 0xFF), // Y-axis value
+  };
 
-  Serial.print("Combined Report: [");
-  for (int i = 0; i < sizeof(combined_report); i++) {
-    Serial.print(combined_report[i], HEX);
-    if (i < sizeof(combined_report) - 1) Serial.print(", ");
-  }
-  Serial.println("]");
-
-  inputCharacteristic->setValue(combined_report, sizeof(combined_report));
+  inputCharacteristic->setValue(report1, sizeof(report1));
   inputCharacteristic->notify();
+
+  inputCharacteristic2->setValue(report2, sizeof(report2));
+  inputCharacteristic2->notify();
 
   Serial.println("HID report sent.");
 
